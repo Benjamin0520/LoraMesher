@@ -13,6 +13,12 @@ from os.path import join, realpath
 current_platform = env.get("PIOPLATFORM", "")
 current_env = env.get("PIOENV", "")
 
+# LLVM XRay is unavailable for the Windows native target. Keep this
+# environment usable there, but explicitly report that tracing is disabled.
+xray_enabled = current_env == "test_native_xray" and os.name != "nt"
+if current_env == "test_native_xray" and not xray_enabled:
+    print("LoRaMesher: XRay tracing disabled on Windows; use Linux for XRay traces.")
+
 if current_platform in ["native", "test_native"]:
     env.Replace(CC="clang", CXX="clang++", LINK="clang++")
 
@@ -108,6 +114,6 @@ if current_env == "test_native_profile":
             e.Append(LINKFLAGS=[_profile_rt_lib])
         e.Append(ENV={"LLVM_PROFILE_FILE": profile_file})
 
-if current_env == "test_native_xray":
+if xray_enabled:
     for e in [env, projenv, global_env]:
         e.Append(LINKFLAGS=["-fxray-instrument"])

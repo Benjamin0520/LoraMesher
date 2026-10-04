@@ -28,10 +28,10 @@ using namespace loramesher;
 //     SPI pins: SCK=9, MISO=11, MOSI=10
 //     Requires: radioConfig.setTcxoVoltage(1.8F)
 
-#define LORA_CS 18   // SPI Chip Select (NSS)
-#define LORA_RST 23  // Radio Reset pin
-#define LORA_IRQ 26  // DIO0 - Primary interrupt
-#define LORA_IO1 33  // DIO1 - Secondary interrupt
+#define LORA_CS 8   // SPI Chip Select (NSS)
+#define LORA_RST 12  // Radio Reset pin
+#define LORA_IRQ 14  // SX1262 DIO1 interrupt
+#define LORA_IO1 13  // SX1262 BUSY
 
 // =============================================================================
 // Radio Configuration
@@ -40,7 +40,7 @@ using namespace loramesher;
 // SF7 + 125kHz: Good balance of range and speed
 // Power: Start low (6 dBm) for testing, increase for longer range
 
-#define LORA_RADIO_TYPE RadioType::kSx1276
+#define LORA_RADIO_TYPE RadioType::kSx1262
 #define LORA_FREQUENCY 869.900F   // MHz - EU868 band
 #define LORA_SPREADING_FACTOR 7U  // SF7-SF12: higher = more range, slower
 #define LORA_BANDWITH 125.0       // kHz - 125/250/500
@@ -49,6 +49,13 @@ using namespace loramesher;
 #define LORA_SYNC_WORD 20U        // Network identifier (0-255)
 #define LORA_CRC true             // Enable CRC checking
 #define LORA_PREAMBLE_LENGTH 8U   // Preamble symbols
+
+// =============================================================================
+// Node Role Configuration
+// =============================================================================
+// Set NETWORK_MANAGER on the coordinator board and NODE_ONLY on member boards.
+// AUTO preserves automatic network discovery/creation.
+constexpr NodeRole kNodeRole = NodeRole::NETWORK_MANAGER;
 
 // =============================================================================
 // Global Variables
@@ -120,6 +127,16 @@ void printNetworkStatus() {
  * @return true if message was sent, false otherwise
  */
 bool sendTestMessage() {
+    // Send() queues data; it does not wait for transmission. Do not let
+    // periodic demo traffic accumulate or compete with forwarded packets.
+    const auto pending = mesher->GetTxQueueSize();
+    if (pending != 0) {
+        LOG_INFO("Waiting for TX queue: pending=%u, TX slots/frame=%u",
+                 static_cast<unsigned>(pending),
+                 static_cast<unsigned>(mesher->GetDataSlotsPerSuperframe()));
+        return false;
+    }
+
     auto routes = mesher->GetRoutingTable();
     if (routes.empty()) {
         return false;
@@ -139,12 +156,12 @@ bool sendTestMessage() {
         return false;
     }
 
-    std::string message = "Hello from node!";
+    std::string message = "Huy dep trai";
     Result result = mesher->Send(
         dest, std::vector<uint8_t>(message.begin(), message.end()));
 
     if (result) {
-        std::cout << "Sent message to 0x" << std::hex << dest << std::dec
+        std::cout << "Queued message to 0x" << std::hex << dest << std::dec
                   << std::endl;
         counter_address++;
         return true;
@@ -161,7 +178,7 @@ bool sendTestMessage() {
 
 void ConfigureAndUseLoraMesher() {
     // Step 1: Configure hardware pins
-    PinConfig pinConfig(LORA_CS, LORA_RST, LORA_IRQ, LORA_IO1);
+    PinConfig pinConfig(LORA_CS, LORA_RST, LORA_IRQ, LORA_IO1, 9, 11, 10);
 
     // Step 2: Configure radio parameters
     RadioConfig radioConfig(LORA_RADIO_TYPE, LORA_FREQUENCY,
@@ -169,13 +186,16 @@ void ConfigureAndUseLoraMesher() {
                             LORA_CODING_RATE, LORA_POWER, LORA_SYNC_WORD,
                             LORA_CRC, LORA_PREAMBLE_LENGTH);
 
+    radioConfig.setTcxoVoltage(1.8F);
+
     // --- Heltec WiFi LoRa V3 configuration ---
     // PinConfig pinConfig(8, 12, 14, 13, 9, 11, 10);  // CS, RST, IRQ, IO1, SCK, MISO, MOSI
     // RadioConfig radioConfig(RadioType::kSx1262, 868.0F, 7U, 125.0, 7U, 14, 20U, true, 8U);
     // radioConfig.setTcxoVoltage(1.8F);
 
-    // Step 3: Create protocol configuration (uses defaults)
+    // Step 3: Configure this board's role before building/starting the mesh
     LoRaMeshProtocolConfig mesh_config;
+    mesh_config.setNodeRole(kNodeRole);
 
     // Step 4: Build and configure LoraMesher instance
     mesher = LoraMesher::Builder()

@@ -11,6 +11,7 @@ namespace loramesher {
 namespace protocols {
 namespace lora_mesh {
 
+// Khởi tạo routing table cho node cục bộ và thiết lập trạng thái ban đầu.
 DistanceVectorRoutingTable::DistanceVectorRoutingTable(AddressType node_address,
                                                        size_t max_nodes)
     : node_address_(node_address),
@@ -28,6 +29,7 @@ DistanceVectorRoutingTable::DistanceVectorRoutingTable(AddressType node_address,
         node_address_, max_nodes_);
 }
 
+// Tra cứu next hop để xác định node kế tiếp khi chuyển tiếp gói tới đích.
 AddressType DistanceVectorRoutingTable::FindNextHop(
     AddressType destination) const {
     std::lock_guard<std::mutex> lock(table_mutex_);
@@ -61,6 +63,7 @@ AddressType DistanceVectorRoutingTable::FindNextHop(
     return best_next_hop;
 }
 
+// Cập nhật hoặc thêm một tuyến đến đích, dựa trên thông tin quảng bá từ node nguồn.
 bool DistanceVectorRoutingTable::UpdateRoute(
     AddressType source, AddressType destination, uint8_t hop_count,
     uint8_t link_quality, uint8_t allocated_data_slots, uint8_t capabilities,
@@ -79,7 +82,6 @@ bool DistanceVectorRoutingTable::UpdateRoute(
     }
 
     bool route_changed = false;
-
     // Find or create node
     auto node_it = GetNode(destination);
     if (node_it != nodes_.end()) {
@@ -211,6 +213,7 @@ bool DistanceVectorRoutingTable::UpdateRoute(
     return route_changed;
 }
 
+// Thêm node cùng các tuyến của nó vào bảng, đồng thời áp dụng giới hạn dung lượng nếu cần.
 bool DistanceVectorRoutingTable::AddNode(
     const types::protocols::lora_mesh::NetworkNodeRoute& node) {
 
@@ -249,6 +252,7 @@ bool DistanceVectorRoutingTable::AddNode(
     }
 }
 
+// Làm mới thông tin node đã biết như pin, vai trò, slot, capability và thời điểm hoạt động.
 bool DistanceVectorRoutingTable::UpdateNode(
     AddressType node_address, uint8_t battery_level, bool is_network_manager,
     uint8_t allocated_data_slots, uint8_t capabilities, uint32_t current_time) {
@@ -295,6 +299,7 @@ bool DistanceVectorRoutingTable::UpdateNode(
     }
 }
 
+// Xóa node khỏi bảng và loại bỏ các tuyến phụ thuộc vào node đó.
 bool DistanceVectorRoutingTable::RemoveNode(AddressType address) {
     std::lock_guard<std::mutex> lock(table_mutex_);
 
@@ -312,6 +317,7 @@ bool DistanceVectorRoutingTable::RemoveNode(AddressType address) {
     return false;
 }
 
+// Làm mới thời điểm cập nhật của tuyến để tuyến không bị xem là hết hạn.
 bool DistanceVectorRoutingTable::RefreshRoute(AddressType destination,
                                               uint32_t current_time) {
     std::lock_guard<std::mutex> lock(table_mutex_);
@@ -324,6 +330,7 @@ bool DistanceVectorRoutingTable::RefreshRoute(AddressType destination,
     return true;
 }
 
+// Loại bỏ route hoặc node quá thời hạn không được cập nhật, theo timeout tương ứng.
 size_t DistanceVectorRoutingTable::RemoveInactiveNodes(
     uint32_t current_time, uint32_t route_timeout_ms,
     uint32_t node_timeout_ms) {
@@ -368,28 +375,33 @@ size_t DistanceVectorRoutingTable::RemoveInactiveNodes(
     return initial_size - nodes_.size();
 }
 
+// Kiểm tra nhanh một địa chỉ node có đang tồn tại trong bảng hay không.
 bool DistanceVectorRoutingTable::IsNodePresent(AddressType address) const {
     std::lock_guard<std::mutex> lock(table_mutex_);
     return GetNode(address) != nodes_.end();
 }
 
 const std::vector<types::protocols::lora_mesh::NetworkNodeRoute>&
+// Trả về danh sách node trong bảng để bên gọi duyệt trực tiếp.
 DistanceVectorRoutingTable::GetNodes() const {
     // Note: Caller must be careful with concurrent access
     return nodes_;
 }
 
 std::vector<types::protocols::lora_mesh::NetworkNodeRoute>
+// Tạo bản sao danh sách node để bên gọi sử dụng an toàn ngoài khóa bảng.
 DistanceVectorRoutingTable::GetNodesCopy() const {
     std::lock_guard<std::mutex> lock(table_mutex_);
     return nodes_;
 }
 
+// Trả về số node hiện đang được lưu trong routing table.
 size_t DistanceVectorRoutingTable::GetSize() const {
     std::lock_guard<std::mutex> lock(table_mutex_);
     return nodes_.size();
 }
 
+// Xuất các route thành bản tin quảng bá; có thể loại trừ node chỉ định để tránh gửi ngược.
 std::vector<RoutingTableEntry> DistanceVectorRoutingTable::GetRoutingEntries(
     AddressType exclude_address) const {
 
@@ -410,6 +422,7 @@ std::vector<RoutingTableEntry> DistanceVectorRoutingTable::GetRoutingEntries(
     return entries;
 }
 
+// Lấy chất lượng liên kết tổng hợp tới node, kết hợp dữ liệu đo và thông tin route.
 uint8_t DistanceVectorRoutingTable::GetLinkQuality(
     AddressType node_address) const {
     std::lock_guard<std::mutex> lock(table_mutex_);
@@ -421,6 +434,7 @@ uint8_t DistanceVectorRoutingTable::GetLinkQuality(
     return 0;
 }
 
+// Lấy chất lượng liên kết trực tiếp đã đo tới neighbor.
 uint8_t DistanceVectorRoutingTable::GetDirectLinkQuality(
     AddressType node_address) const {
     std::lock_guard<std::mutex> lock(table_mutex_);
@@ -436,6 +450,7 @@ uint8_t DistanceVectorRoutingTable::GetDirectLinkQuality(
     return 0;
 }
 
+// Kiểm tra dấu hiệu liên kết một chiều có thể làm truyền nhận giữa hai node mất cân bằng.
 bool DistanceVectorRoutingTable::HasUnidirectionalRisk(
     AddressType node_address) const {
     std::lock_guard<std::mutex> lock(table_mutex_);
@@ -449,6 +464,7 @@ bool DistanceVectorRoutingTable::HasUnidirectionalRisk(
     return false;
 }
 
+// Giảm chất lượng route khi phát hiện lỗi truyền hoặc liên kết suy giảm.
 void DistanceVectorRoutingTable::DegradeRouteQuality(AddressType destination,
                                                      uint8_t quality) {
     std::lock_guard<std::mutex> lock(table_mutex_);
@@ -459,12 +475,14 @@ void DistanceVectorRoutingTable::DegradeRouteQuality(AddressType destination,
     }
 }
 
+// Đăng ký callback để thông báo cho thành phần khác khi route thay đổi.
 void DistanceVectorRoutingTable::SetRouteUpdateCallback(
     RouteUpdateCallback callback) {
     std::lock_guard<std::mutex> lock(table_mutex_);
     route_callback_ = callback;
 }
 
+// Cấu hình số node tối đa mà routing table được phép lưu.
 void DistanceVectorRoutingTable::SetMaxNodes(size_t max_nodes) {
     std::lock_guard<std::mutex> lock(table_mutex_);
     max_nodes_ = max_nodes;
@@ -477,6 +495,7 @@ void DistanceVectorRoutingTable::SetMaxNodes(size_t max_nodes) {
     }
 }
 
+// Cập nhật slot điều khiển dùng cho đồng bộ hoặc liên lạc của node.
 bool DistanceVectorRoutingTable::SetControlSlotIndex(
     AddressType node_address, uint8_t control_slot_index) {
     std::lock_guard<std::mutex> lock(table_mutex_);
@@ -488,6 +507,7 @@ bool DistanceVectorRoutingTable::SetControlSlotIndex(
     return true;
 }
 
+// Xóa toàn bộ trạng thái node và route khỏi bảng.
 void DistanceVectorRoutingTable::Clear() {
     std::lock_guard<std::mutex> lock(table_mutex_);
 
@@ -504,6 +524,7 @@ void DistanceVectorRoutingTable::Clear() {
     LOG_INFO("Cleared routing table for node 0x%04X", node_address_);
 }
 
+// Tổng hợp số liệu hiện tại của routing table thành chuỗi thống kê.
 std::string DistanceVectorRoutingTable::GetStatistics() const {
     std::lock_guard<std::mutex> lock(table_mutex_);
 
@@ -525,6 +546,7 @@ std::string DistanceVectorRoutingTable::GetStatistics() const {
     return oss.str();
 }
 
+// Cấu hình tham số và trọng số dùng để tính chất lượng liên kết.
 void DistanceVectorRoutingTable::SetLinkQualityParams(
     uint8_t ewma_alpha_fixed, uint8_t inactivation_threshold,
     uint8_t reactivation_threshold) {
@@ -539,6 +561,7 @@ void DistanceVectorRoutingTable::SetLinkQualityParams(
     }
 }
 
+// Cập nhật và làm suy giảm thống kê liên kết theo thời gian để phản ánh tình trạng hiện tại.
 void DistanceVectorRoutingTable::UpdateLinkStatistics() {
     std::lock_guard<std::mutex> lock(table_mutex_);
 
@@ -647,6 +670,7 @@ void DistanceVectorRoutingTable::UpdateLinkStatistics() {
     }
 }
 
+// Xử lý bản tin routing nhận được: cập nhật neighbor, duyệt từng route, thêm hoặc làm mới node/tuyến và loại bỏ thông tin không hợp lệ/hết hạn.
 bool DistanceVectorRoutingTable::ProcessRoutingTableMessage(
     AddressType source_address, std::span<const RoutingTableEntry> entries,
     uint32_t reception_timestamp, uint8_t local_link_quality, uint8_t max_hops,
@@ -1010,6 +1034,7 @@ bool DistanceVectorRoutingTable::ProcessRoutingTableMessage(
 // Private helper methods
 
 std::vector<types::protocols::lora_mesh::NetworkNodeRoute>::iterator
+// Tìm node theo địa chỉ và trả về iterator có thể chỉnh sửa.
 DistanceVectorRoutingTable::GetNode(AddressType node_address) {
     return std::find_if(
         nodes_.begin(), nodes_.end(),
@@ -1020,6 +1045,7 @@ DistanceVectorRoutingTable::GetNode(AddressType node_address) {
 }
 
 std::vector<types::protocols::lora_mesh::NetworkNodeRoute>::const_iterator
+// Tìm node theo địa chỉ ở chế độ chỉ đọc.
 DistanceVectorRoutingTable::GetNode(AddressType node_address) const {
     return std::find_if(
         nodes_.begin(), nodes_.end(),
@@ -1029,10 +1055,12 @@ DistanceVectorRoutingTable::GetNode(AddressType node_address) const {
         });
 }
 
+// Kiểm tra việc thêm node mới có vượt quá dung lượng bảng đã cấu hình hay không.
 bool DistanceVectorRoutingTable::WouldExceedLimit() const {
     return max_nodes_ > 0 && nodes_.size() >= max_nodes_;
 }
 
+// Giải phóng chỗ bằng cách loại node cũ nhất khi bảng đã đạt giới hạn.
 bool DistanceVectorRoutingTable::RemoveOldestNode() {
     if (nodes_.empty()) {
         return false;
@@ -1064,6 +1092,7 @@ bool DistanceVectorRoutingTable::RemoveOldestNode() {
     return false;
 }
 
+// Tính chất lượng liên kết tổng hợp cho node từ các số đo sẵn có.
 uint8_t DistanceVectorRoutingTable::CalculateComprehensiveLinkQuality(
     AddressType node_address) const {
     auto node_it = GetNode(node_address);
@@ -1081,6 +1110,7 @@ uint8_t DistanceVectorRoutingTable::CalculateComprehensiveLinkQuality(
     return 128;  // Default medium quality for unknown nodes
 }
 
+// So sánh hai route để chọn phương án tốt hơn theo tiêu chí của NetworkNodeRoute.
 bool DistanceVectorRoutingTable::IsBetterRoute(
     const types::protocols::lora_mesh::NetworkNodeRoute& current,
     const types::protocols::lora_mesh::NetworkNodeRoute& potential) const {
@@ -1088,6 +1118,7 @@ bool DistanceVectorRoutingTable::IsBetterRoute(
     return potential.IsBetterRouteThan(current);
 }
 
+// Gọi callback đã đăng ký để thông báo route vừa được thêm hoặc thay đổi.
 void DistanceVectorRoutingTable::NotifyRouteUpdate(bool route_added,
                                                    AddressType destination,
                                                    AddressType next_hop,
@@ -1097,6 +1128,7 @@ void DistanceVectorRoutingTable::NotifyRouteUpdate(bool route_added,
     }
 }
 
+// Ghi thông tin route ra log nhằm hỗ trợ theo dõi và chẩn đoán.
 void DistanceVectorRoutingTable::LogRouteEntry(
     const types::protocols::lora_mesh::NetworkNodeRoute& node) {
     LOG_DEBUG(
